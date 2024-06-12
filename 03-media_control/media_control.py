@@ -7,54 +7,73 @@ import random
 import sys
 import keras.models as models
 from time import sleep
+import pynput
+import mediapipe as mp
 
 video_id = 0
 
 if len(sys.argv) > 1:
     video_id = int(sys.argv[1])
 
-# include only those gestures
-CONDITIONS = ['ok', 'stop', 'like', 'dislike']
 LABELS = ['none', 'ok', 'stop', 'like', 'dislike']
 
 # image size
 IMG_SIZE = 64
 SIZE = (IMG_SIZE, IMG_SIZE)
-
-# number of color channels we want to use
-# set to 1 to convert to grayscale
-# set to 3 to use color images
-COLOR_CHANNELS = 3
+RESIZE_WIDTH =  480
+RESIZE_HEIGHT = 270
 
 cap = cv2.VideoCapture(video_id)
 
 model = models.load_model("./gesture_recognition.keras")
 
-def sliding_window(image, stepSize, windowSize):
-    # slide a window across the image
-    for y in range(0, image.shape[0], stepSize):
-        for x in range(0, image.shape[1], stepSize):
-            # yield the current window
-            yield (x, y, image[y:y + windowSize[1], x:x + windowSize[0]])
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5)
 
+# Functionality for (just) hand position detection created by Github Copilot
 def check_gesture(frame):
-    # Preprocess the image
-    predictions = []
-    # Go through the image with a sliding window
-    for (x, y, window) in sliding_window(frame, stepSize=int(IMG_SIZE/2), windowSize=SIZE):
-        if window.shape != (IMG_SIZE, IMG_SIZE, COLOR_CHANNELS):
-            continue
-        # Classify each region
-        prediction = model.predict(np.expand_dims(window, axis=0))
-        gesture = LABELS[np.argmax(prediction)]
-        print(gesture, np.max(prediction))
-        predictions.append(gesture)
-    # Get the most second most common prediction
-    print(predictions)
-    return predictions
+    rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Detect hands using MediaPipe Hands
+    results = hands.process(rgb_image)
+
+    # resize image for faster processing
+    frame = cv2.resize(frame, (RESIZE_WIDTH, RESIZE_HEIGHT))
+
+    # Check if any hand is detected
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            # Get the bounding box coordinates
+            x_min = min([landmark.x for landmark in hand_landmarks.landmark]) * RESIZE_WIDTH
+            x_max = max([landmark.x for landmark in hand_landmarks.landmark]) * RESIZE_WIDTH
+            y_min = min([landmark.y for landmark in hand_landmarks.landmark]) * RESIZE_HEIGHT
+            y_max = max([landmark.y for landmark in hand_landmarks.landmark]) * RESIZE_HEIGHT
+
+            # Extract the ROI
+            roi = frame[int(y_min):int(y_max), int(x_min):int(x_max)]
+            if roi.size != 0:
+                # Resize the ROI to the input size expected by the gesture recognition model
+                roi = cv2.resize(roi, (IMG_SIZE, IMG_SIZE))
+                prediction = model.predict(np.expand_dims(roi, axis=0))
+                gesture = LABELS[np.argmax(prediction)]
+                print(gesture, np.max(prediction))
+
+                return gesture
+    return 'none'
+
+def use_gesture(gesture):
+    if gesture == 'ok':
+        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_play_pause)
+    elif gesture == 'stop':
+        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_play_pause)
+    elif gesture == 'like':
+        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_up)
+    elif gesture == 'dislike':
+        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_down)
+
 
 while True:
     ret, frame = cap.read()
     gesture = check_gesture(frame)
-    print(CONDITIONS[gesture])
-    sleep(2)
+    use_gesture(gesture)
+    sleep(0.5)
