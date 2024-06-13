@@ -67,9 +67,11 @@ def use_gesture(gesture):
     elif gesture == 'stop':
         pynput.keyboard.Controller().press(pynput.keyboard.Key.media_play_pause)
     elif gesture == 'like':
-        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_up)
+        print('would make louder now')
+        #pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_up)
     elif gesture == 'dislike':
-        pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_down)
+        print('would make less louder now')
+        #pynput.keyboard.Controller().press(pynput.keyboard.Key.media_volume_down)
 
 
 while True:
